@@ -1,0 +1,10 @@
+{
+  "id": "Ravonto.FusionMCPServer",
+  "name": "Fusion MCP Server",
+  "description": "Starts the MCP server and file-based bridge for MCP clients.",
+  "version": "1.0.0",
+  "runOnStartup": false,
+  "supportedOS": "Windows|Mac"
+}
+
+
