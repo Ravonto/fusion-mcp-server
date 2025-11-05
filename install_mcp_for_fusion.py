@@ -107,9 +107,27 @@ def install_mcp(python_path):
             print("Errors/Warnings:")
             print(result.stderr)
         
-        # Verify installation - just check if we can import mcp without error
+        # Also install uvicorn required by the server
+        try:
+            result_uvicorn = subprocess.run(
+                [python_path, "-m", "pip", "install", "uvicorn"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            print("uvicorn installation output:")
+            print(result_uvicorn.stdout)
+            if result_uvicorn.stderr:
+                print("uvicorn Errors/Warnings:")
+                print(result_uvicorn.stderr)
+        except subprocess.CalledProcessError as e:
+            print("Warning: Failed to install uvicorn. The add-in may not start the HTTP server.")
+            print(e.stdout)
+            print(e.stderr)
+
+        # Verify installation - just check if we can import mcp and uvicorn without error
         verify = subprocess.run(
-            [python_path, "-c", "import mcp; print('MCP installed successfully!')"],
+            [python_path, "-c", "import mcp, uvicorn; print('MCP and uvicorn installed successfully!')"],
             capture_output=True,
             text=True
         )

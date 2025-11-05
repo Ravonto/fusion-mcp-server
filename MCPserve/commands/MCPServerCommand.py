@@ -13,6 +13,30 @@ from pathlib import Path
 
 from ..lib import fusionAddInUtils as futil
 
+# Dynamically resolve workspace paths to avoid hard-coded user-specific directories
+def get_workspace_paths():
+    try:
+        # Prefer an explicit override via environment variable
+        env_path = os.getenv("FUSION_MCP_WORKSPACE")
+        if env_path and os.path.isdir(env_path):
+            workspace_path = os.path.abspath(env_path)
+        else:
+            # Derive the repository root as the parent of the add-in folder
+            addon_path = os.path.dirname(os.path.dirname(__file__))
+            candidate = os.path.abspath(os.path.join(addon_path, os.pardir))
+            workspace_path = candidate if os.path.isdir(candidate) else addon_path
+
+        workspace_comm_dir = os.path.join(workspace_path, "mcp_comm")
+        os.makedirs(workspace_comm_dir, exist_ok=True)
+        return workspace_path, workspace_comm_dir
+    except Exception:
+        # Fallback: keep communication within the add-in directory
+        addon_path = os.path.dirname(os.path.dirname(__file__))
+        workspace_path = addon_path
+        workspace_comm_dir = os.path.join(addon_path, "mcp_comm")
+        os.makedirs(workspace_comm_dir, exist_ok=True)
+        return workspace_path, workspace_comm_dir
+
 # Global variables
 app = adsk.core.Application.get()
 ui = app.userInterface
@@ -56,11 +80,14 @@ def run_mcp_server():
         import uvicorn
         import threading
         
+        # Resolve workspace paths
+        workspace_path, workspace_comm_dir = get_workspace_paths()
+        
         # Also, directly test showing a message box when the server starts
         def test_direct_message():
             try:
                 test_message = "MCP Server startup test message"
-                debug_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server/mcp_comm/startup_test_message.txt"
+                debug_path = os.path.join(workspace_comm_dir, "startup_test_message.txt")
                 
                 with open(debug_path, "a") as f:
                     f.write(f"Trying command-based test message at server startup: {time.ctime()}\n")
@@ -79,10 +106,7 @@ def run_mcp_server():
         test_timer.daemon = True
         test_timer.start()
         
-        # Create workspace path and diagnostic log
-        workspace_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server"
-        workspace_comm_dir = os.path.join(workspace_path, "mcp_comm")
-        os.makedirs(workspace_comm_dir, exist_ok=True)
+        # Create diagnostic log in the workspace communication directory
         
         # Write diagnostic info without relying on __version__
         diagnostic_log = os.path.join(workspace_comm_dir, "mcp_server_diagnostics.log")
@@ -375,9 +399,7 @@ Suggest appropriate parameters, their values, units, and purposes based on the u
         addon_comm_dir = os.path.join(addon_path, "mcp_comm")
         os.makedirs(addon_comm_dir, exist_ok=True)
         
-        # Workspace path (the fusion-mcp-server repository)
-        workspace_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server"
-        workspace_comm_dir = Path(workspace_path) / "mcp_comm"
+        # Workspace paths are already resolved above
         if os.path.exists(workspace_path):
             os.makedirs(str(workspace_comm_dir), exist_ok=True)
         
@@ -619,7 +641,7 @@ Suggest appropriate parameters, their values, units, and purposes based on the u
                                                 message = params.get("message", "")
                                                 
                                                 # Create debug log
-                                                debug_file = os.path.join(workspace_comm_dir, "command_message_debug.txt")
+                                    debug_file = os.path.join(workspace_comm_dir, "command_message_debug.txt")
                                                 with open(debug_file, "a") as f:
                                                     f.write(f"Processing message_box command with: {message} at {time.ctime()}\n")
                                                 
@@ -806,10 +828,9 @@ Suggest appropriate parameters, their values, units, and purposes based on the u
     except Exception as e:
         print(f"Error in MCP server: {str(e)}")
         
-        # Create error file
-        workspace_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server"
+        # Create error file in workspace
+        workspace_path, workspace_comm_dir = get_workspace_paths()
         if os.path.exists(workspace_path):
-            workspace_comm_dir = os.path.join(workspace_path, "mcp_comm")
             os.makedirs(workspace_comm_dir, exist_ok=True)
             error_file = os.path.join(workspace_comm_dir, "mcp_server_error.txt")
             with open(error_file, "w") as f:
@@ -825,8 +846,7 @@ def start_server():
     print("Starting MCP server...")
     
     # Create workspace comm directory if it doesn't exist
-    workspace_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server"
-    workspace_comm_dir = os.path.join(workspace_path, "mcp_comm")
+    workspace_path, workspace_comm_dir = get_workspace_paths()
     if os.path.exists(workspace_path):
         os.makedirs(workspace_comm_dir, exist_ok=True)
         # Create a log file
@@ -938,7 +958,8 @@ class MCPServerCommandExecuteHandler(adsk.core.CommandEventHandler):
             success = start_server()
             
             # Try to show a test message directly for debugging
-            debug_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server/mcp_comm/execute_debug.txt"
+            workspace_path, workspace_comm_dir = get_workspace_paths()
+            debug_path = os.path.join(workspace_comm_dir, "execute_debug.txt")
             with open(debug_path, "a") as f:
                 f.write(f"Execute handler called at {time.ctime()}\n")
                 f.write(f"Trying command-based test message\n")
@@ -952,8 +973,7 @@ class MCPServerCommandExecuteHandler(adsk.core.CommandEventHandler):
                     f.write(f"Command-based test message failed: {str(e)} at {time.ctime()}\n")
             
             if success:
-                workspace_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server"
-                workspace_comm_dir = os.path.join(workspace_path, "mcp_comm")
+                workspace_path, workspace_comm_dir = get_workspace_paths()
                 
                 # Create a startup log file
                 startup_log_file = os.path.join(workspace_comm_dir, "mcp_server_startup_log.txt")
@@ -964,8 +984,7 @@ class MCPServerCommandExecuteHandler(adsk.core.CommandEventHandler):
                 
                 ui.messageBox("MCP Server started successfully!\n\nServer is running at http://127.0.0.1:3000/sse\n\nReady for client connections.")
             else:
-                workspace_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server"
-                workspace_comm_dir = os.path.join(workspace_path, "mcp_comm")
+                workspace_path, workspace_comm_dir = get_workspace_paths()
                 
                 # Check for error file
                 error_file = os.path.join(workspace_comm_dir, "mcp_server_error.txt")
@@ -1005,8 +1024,7 @@ def stop_server_on_stop(context):
             server_running = False
             
             # Create a shutdown log file
-            workspace_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server"
-            workspace_comm_dir = os.path.join(workspace_path, "mcp_comm")
+            workspace_path, workspace_comm_dir = get_workspace_paths()
             os.makedirs(workspace_comm_dir, exist_ok=True)
             
             shutdown_log_file = os.path.join(workspace_comm_dir, "mcp_server_shutdown_log.txt")
@@ -1092,7 +1110,8 @@ def run(context):
 # Function to create a message box command
 def create_message_box_command(message):
     try:
-        debug_file = "C:/Users/Joseph/Documents/code/fusion-mcp-server/mcp_comm/message_command_debug.txt"
+        _, workspace_comm_dir = get_workspace_paths()
+        debug_file = os.path.join(workspace_comm_dir, "message_command_debug.txt")
         with open(debug_file, "a") as f:
             f.write(f"\nCreating message box command for: {message} at {time.ctime()}\n")
         
@@ -1142,7 +1161,8 @@ def show_message_box(message):
     """Display a message box in Fusion 360."""
     try:
         # Log message for debugging
-        debug_path = "C:/Users/Joseph/Documents/code/fusion-mcp-server/mcp_comm/message_debug.txt"
+        _, workspace_comm_dir = get_workspace_paths()
+        debug_path = os.path.join(workspace_comm_dir, "message_debug.txt")
         with open(debug_path, "a") as f:
             f.write(f"Trying to show message: {message} at {time.ctime()}\n")
         
@@ -1169,7 +1189,8 @@ class MessageBoxCommandExecuteHandler(adsk.core.CommandEventHandler):
     def notify(self, args):
         try:
             # Display the message
-            debug_file = "C:/Users/Joseph/Documents/code/fusion-mcp-server/mcp_comm/message_command_debug.txt"
+            _, workspace_comm_dir = get_workspace_paths()
+            debug_file = os.path.join(workspace_comm_dir, "message_command_debug.txt")
             with open(debug_file, "a") as f:
                 f.write(f"MessageBoxCommand executing for: {self.message} at {time.ctime()}\n")
             
@@ -1190,7 +1211,8 @@ class MessageBoxCommandCreatedHandler(adsk.core.CommandCreatedEventHandler):
     
     def notify(self, args):
         try:
-            debug_file = "C:/Users/Joseph/Documents/code/fusion-mcp-server/mcp_comm/message_command_debug.txt"
+            _, workspace_comm_dir = get_workspace_paths()
+            debug_file = os.path.join(workspace_comm_dir, "message_command_debug.txt")
             with open(debug_file, "a") as f:
                 f.write(f"MessageBoxCommand created for: {self.message} at {time.ctime()}\n")
             
